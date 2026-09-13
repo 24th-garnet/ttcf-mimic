@@ -1,0 +1,31 @@
+# ── この枝には「動かすのに要るもの」しか置かない ──────────────────
+#
+# 中身はクライアントの実データを扱うアプリである。
+# **業務のデータそのものは、この枝にも GitHub にも置かない。**
+# 置き場は Supabase（記録の本体）と Supabase Storage（実物）である。
+#
+# 下は「うっかり入れない」ための網。消さないこと。
+
+# 行データ・断面（656MB）
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Postgres へ流すために書き出した中身（345MB。クライアントの実データ）
+db/pg/data/
+
+# クロールの成果物。**実物の帳票 1,057 件を含む**
+crawl/out/
+crawl/shots/
+airtable-csv/
+
+# 解析の中間物（12MB）。実行時に要るのは spec/gates.json だけ
+spec/*
+!spec/gates.json
+
+node_modules
+.env
+.env.*
+.vercel
+*.tmp.mjs
