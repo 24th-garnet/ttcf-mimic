@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["hnd1"],
+  "fluid": true,
+  "functions": {
+    "server.mjs": {
+      "maxDuration": 300,
+      "includeFiles": "{db/schema.sql,db/*.mjs,app/**,spec/gates.json,crawl/lib/airmsg.mjs}"
+    }
+  },
+  "crons": [
+    { "path": "/_warm", "schedule": "*/5 * * * *" }
+  ]
+}
