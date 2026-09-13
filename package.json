@@ -2,8 +2,12 @@
   "name": "ttcf",
   "private": true,
   "type": "module",
+  "//engines": "比較の正解（常駐版）が v22 なので、Vercel もそこへ揃える。node:sqlite は 22 では experimental・24 では安定で、同じ入力で同じ出力になる保証が無い。移植前後のバイト比較が終わるまでは動かさない",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
-    "start": "node app/serve.mjs",
+    "start": "TZ=UTC node app/serve.mjs",
     "deploy": "bash deploy/install.sh",
     "deploy:stop": "bash deploy/install.sh stop",
     "deploy:status": "bash deploy/install.sh status",
