@@ -55,6 +55,13 @@ import { 計算器を作る } from "./calc.mjs";
 const 購読 = new Set();
 export function 書いた後(fn) { 購読.add(fn); return () => 購読.delete(fn); }
 const 知らせる = (x) => { for (const fn of 購読) { try { fn(x); } catch (e) { console.error("書いた後の購読で落ちました:", e.message); } } };
+/**
+ * **ここで書いたのではないとき**に、購読者へ同じ形で知らせる。
+ * 他のインスタンスが書いたものを取り込んだ後、クエリエンジンの断面を追随させるために
+ * `db/replicate.mjs` が呼ぶ。serve.mjs:54 の `実行.読み直す(行たち)` が働くのは、この道である。
+ * 書き込みそのものには関わらない（作る/更新/消す の中からは呼ばない）。
+ */
+export function 外から知らせる(x) { 知らせる(x); }
 
 const 乱英数 = () => {
   const s = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";

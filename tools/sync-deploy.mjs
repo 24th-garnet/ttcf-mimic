@@ -37,10 +37,11 @@ const 写すもの = [
   ...fs.readdirSync(path.join(ROOT, "app", "ext")).filter((f) => /\.(mjs|md)$/.test(f)).map((f) => `app/ext/${f}`),
   "db/schema.sql", "db/open.mjs", "db/query.mjs", "db/calc.mjs", "db/formula.mjs", "db/write.mjs",
   "db/actions.mjs", "db/hydrate.mjs", "db/layouts.mjs", "db/bom.mjs", "db/artifacts.mjs",
-  "db/pg/001_schema.sql", "db/pg/002_files.sql", "db/pg/mapping.mjs",
+  "db/replicate.mjs",
+  "db/pg/001_schema.sql", "db/pg/002_files.sql", "db/pg/003_effect.sql", "db/pg/mapping.mjs",
   "spec/gates.json", "spec/published-layout.json",
   ...["apply-schema", "check-columns", "check-env", "compare", "export-to-pg", "extract-layouts",
-      "harvest", "load-to-pg", "load-files-to-pg", "pgenv", "sync-deploy", "try-hydrate", "verify-pg"]
+      "harvest", "load-to-pg", "load-files-to-pg", "pgenv", "sync-deploy", "test-replicate", "try-hydrate", "verify-pg"]
      .map((f) => `tools/${f}.mjs`),
 ];
 
