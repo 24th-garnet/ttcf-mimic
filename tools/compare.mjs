@@ -124,7 +124,7 @@ async function 取りに行く() {
     const t0 = Date.now();
     let code = 0, 体 = "", 型 = "";
     try {
-      const r = await fetch(BASE + u, { headers: 頭, signal: AbortSignal.timeout(180_000) });
+      const r = await fetch(BASE + u, { headers: 頭, signal: AbortSignal.timeout(300_000) });
       code = r.status;
       型 = r.headers.get("content-type") ?? "";
       体 = await r.text();
@@ -145,6 +145,18 @@ async function 取りに行く() {
   for (let i = 0; i < 経路.length; i += 並列) {
     await Promise.all(経路.slice(i, i + 並列).map(一本));
   }
+  /**
+   * **取れなかったものは 1 本ずつ取り直す。**
+   * 5.26MB の CSV は手元でも並列 4 だと散発的に fetch が落ちる（毎回同じ 4 本で出た）。
+   * 取れないまま index に残すと、比較で「不一致」に見えて原因を探すことになる。
+   */
+  for (let 回 = 1; 回 <= 3; 回++) {
+    const だめ = 索引.filter((x) => x.code === -1);
+    if (!だめ.length) break;
+    console.log(`\n  取れなかった ${だめ.length} 本を 1 本ずつ取り直します（${回}/3）`);
+    for (const x of だめ) { 索引.splice(索引.indexOf(x), 1); await 一本(x.経路); }
+  }
+
   索引.sort((a, b) => a.経路.localeCompare(b.経路));
   fs.writeFileSync(path.join(先, "index.json"), JSON.stringify({ base: BASE, 取った: new Date().toISOString(), 経路: 索引 }, null, 1));
 

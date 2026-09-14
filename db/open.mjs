@@ -20,7 +20,15 @@ import { DatabaseSync } from "node:sqlite";
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const SPEC = path.join(ROOT, "spec");
 export const DATA = path.join(ROOT, "data");
-export const DB_FILE = path.join(DATA, "ttcf.db");
+/**
+ * 既定は data/ttcf.db。`TTCF_DB` があればそれを開く。
+ *
+ * **書き込みの試験で、正解の DB を汚さないために要る。** 常駐版はファイルに直接書くので、
+ * 比較の基準（data/ttcf.db、Supabase への移送元でもある）に試しの行が残ってしまう。
+ * 複製を指して走らせ、終わったら複製を捨てる。
+ * 環境変数を置かなければ振る舞いは今までと 1 文字も変わらない。
+ */
+export const DB_FILE = process.env.TTCF_DB || path.join(DATA, "ttcf.db");
 
 /**
  * 器の差し替え口。**Vercel ではファイルを開けないので、組み上げたインメモリの DB を渡す。**

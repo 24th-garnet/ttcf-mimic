@@ -41,7 +41,8 @@ const 写すもの = [
   "db/pg/001_schema.sql", "db/pg/002_files.sql", "db/pg/003_effect.sql", "db/pg/mapping.mjs",
   "spec/gates.json", "spec/published-layout.json",
   ...["apply-schema", "check-columns", "check-env", "compare", "export-to-pg", "extract-layouts",
-      "harvest", "load-to-pg", "load-files-to-pg", "pgenv", "sync-deploy", "test-replicate", "try-hydrate", "verify-pg"]
+      "harvest", "load-to-pg", "load-files-to-pg", "measure-csv", "pgenv", "sync-deploy",
+      "test-replicate", "try-hydrate", "verify-pg", "write-compare"]
      .map((f) => `tools/${f}.mjs`),
 ];
 

@@ -45,9 +45,24 @@ function 土台を診る() {
   return {
     リージョン: { 実際: 地 ?? "(Vercel 外)", 期待: "hnd1",
       判定: !地 ? "—" : 地 === "hnd1" ? "○" : "× vercel.json の regions が効いていない" },
-    メモリ: { totalmem: 総 + "MB", ヒープ上限: mb(v8.getHeapStatistics().heap_size_limit) + "MB",
-      期待: "4096MB",
-      判定: 総 >= 3500 ? "○" : "× Function CPU を Performance(4GB) にして**再デプロイ**する" },
+    /**
+     * ■ ヒープ上限は容器より**下**でなければならない
+     *
+     * インメモリ SQLite の実体（約 1.5GB）は **V8 ヒープの外**にある。
+     * ヒープ上限が容器と同じだと、V8 は容器いっぱいまで伸ばそうとし、
+     * native と合わせて容器を超えて**プロセスごと落ちる**
+     * （実測 2026-09-14: 重い CSV 2 本で FUNCTION_INVOCATION_FAILED）。
+     * `NODE_OPTIONS=--max-old-space-size=2400` で抑える。
+     */
+    メモリ: {
+      totalmem: 総 + "MB", ヒープ上限: mb(v8.getHeapStatistics().heap_size_limit) + "MB",
+      いまのRSS: mb(process.memoryUsage().rss) + "MB",
+      いまのヒープ: mb(process.memoryUsage().heapUsed) + "MB",
+      期待: "容器 4096MB 以上・ヒープ上限は容器 − 1.7GB 程度",
+      判定: 総 < 3500 ? "× Function CPU を Performance(4GB) にして**再デプロイ**する"
+        : mb(v8.getHeapStatistics().heap_size_limit) > 総 - 1400
+          ? "× ヒープ上限が容器に近すぎる。NODE_OPTIONS=--max-old-space-size=2400 を入れる"
+          : "○" },
     ロケール: { 既定: ロケール, 例: (1234567.5).toLocaleString(), icu: process.versions.icu ?? "なし",
       期待: "en-US", 判定: ロケール === "en-US" ? "○" : "× 335 画面すべてで桁区切りが変わる" },
     時間帯: { 既定: 帯, TZ: process.env.TZ ?? "(未設定)", 期待: "UTC",
@@ -87,18 +102,31 @@ const 書く経路 = [
 const 書きに来た = (req, u) =>
   req.method !== "GET" && req.method !== "HEAD" ? true : 書く経路.some((r) => r.test(u.pathname));
 
+/** 途中で譲る経路。書き込みに加えて /artifact（実物を Supabase から引くので async） */
+const 譲る経路 = /^\/artifact\//;
+const 直列にする = (req, u) => 書きに来た(req, u) || 譲る経路.test(u.pathname);
+
 /**
- * ─── 要求を 1 本ずつ処理する ───
+ * ─── どの要求を 1 本ずつにするか ───
  *
- * `app/serve.mjs:1400` の `見せるタブ` と `app/ext/10-buttons.mjs:43`・`50-fieldbuttons.mjs:36` の
- * `今のURL` は**モジュールの変数**で、要求ごとに上書きされる。
- * 「全部同期だから大丈夫」という前提は既に破れていて、POST 経路には
- * `await X.本文を読む(req)` がある（10-buttons.mjs:516,602 ほか 5 箇所）。
+ * `app/serve.mjs:1400` の `見せるタブ` と `app/ext/10-buttons.mjs:43`・
+ * `50-fieldbuttons.mjs:36` の `今のURL` は**モジュールの変数**で、要求ごとに上書きされる。
+ * 途中に `await` が入ると、別の要求が値を書き換えてから描画が続きうる。
  *
- * インスタンスの中で 1 本ずつ処理すれば 3 つとも完全に塞がり、
- * **単一プロセスの常駐版と全く同じ意味論になる**（比較可能性が一番高く保たれる）。
- * 温まった画面は 8〜10ms なので 1 インスタンスで 100 req/s 出る。
- * スループットを捨てて同一性を買う。並びは Fluid compute のインスタンス数で稼ぐ。
+ * **だが `await` が入るのは書き込みの経路と /artifact だけである**（実測）:
+ *
+ *   app/ext/20-cells.mjs:407        POST /cell/…            async
+ *   app/ext/40-dash.mjs:886         GET  /artifact/…        async（実物を Supabase から引く）
+ *   app/ext/10-buttons.mjs:516,602  await X.本文を読む(req)
+ *   app/ext/50-fieldbuttons.mjs:401,409,431   同上
+ *   app/serve.mjs:1369              POST の本文（/form・/do・/gate・/mform）
+ *
+ * GET の読み取りは**要求の頭から応答まで一度も譲らない**ので、
+ * 値が書き換わる隙が無い。だから読み取りを直列にしても得るものが無く、
+ * **失うものは大きい**: 重い CSV は 1 本 15〜20 秒かかり、直列にすると後続を全部塞ぐ
+ * （実測 2026-09-14: 3 本同時に当てたら 1 本が 10 分以上返らなくなった）。
+ *
+ * よって**書き込みと /artifact だけ**を 1 本ずつにする。
  */
 let 列 = Promise.resolve();
 const 並ばせる = (fn) => (列 = 列.then(fn, fn));
@@ -199,47 +227,69 @@ ${だめ.length ? `<p>置き先の前提で ${だめ.length} 件が期待どお�
   }
 
   /**
-   * ここから先は 1 本ずつ。前の要求が終わってから次を始める。
+   * ─── 書き込み ───
    *
-   *   （書き込みなら）錠を取る → 取り込む → 内側へ流す → 送り出す → 錠を返す → 応答
+   *   1 本ずつ → 錠を取る → 取り込む → 内側へ流す → 送り出す → 錠を返す → 応答
    *
    * **応答を返す前に送り出す。** 先に返すと、利用者が「保存できた」と思った後で
-   * Supabase への書き出しが落ちる窓ができる。
+   * Supabase への書き出しが落ちる窓ができる。だから応答は受け切って握っておく。
    */
-  並ばせる(async () => {
-    const 書く = 書きに来た(req, u);
-    try {
-      if (複製?.動いている?.()) {
-        if (書く) await 複製.錠を取る();
-        await 複製.取り込む();
+  if (直列にする(req, u)) {
+    並ばせる(async () => {
+      const 書く = 書きに来た(req, u);
+      try {
+        if (複製?.動いている?.()) {
+          if (書く) await 複製.錠を取る();
+          await 複製.取り込む();
+        }
+        const 返り = await 受け切る(req);
+        if (複製?.動いている?.()) {
+          const n = await 複製.送り出す();
+          if (n && !書く) console.error(`× 書き込みの経路として数えていない要求が ${n} 行を書きました: ${req.method} ${u.pathname}`);
+        }
+        res.writeHead(返り.code, 返り.頭);
+        res.end(返り.体);
+      } catch (e) {
+        console.error("受付で落ちました:", e);
+        if (!res.headersSent) 出す(502, "text/plain; charset=utf-8", `受付で落ちました: ${e?.message ?? e}\n`);
+        else res.destroy();
+      } finally {
+        if (複製?.動いている?.()) await 複製.錠を返す().catch((err) => console.error("錠を返せません:", err));
       }
-      const 返り = await 内側へ流す(req);
-      /**
-       * 書き込みが走っていれば送り出す。**書く経路だと思っていない要求でも確かめる。**
-       * 経路の見落としで静かに消えるより、錠なしでも残るほうがよい（そのときは印を出す）。
-       */
-      if (複製?.動いている?.()) {
-        const n = await 複製.送り出す();
-        if (n && !書く) console.error(`× 書き込みの経路として数えていない要求が ${n} 行を書きました: ${req.method} ${u.pathname}`);
-      }
-      res.writeHead(返り.code, 返り.頭);
-      res.end(返り.体);
-    } catch (e) {
-      console.error("受付で落ちました:", e);
-      if (!res.headersSent) 出す(502, "text/plain; charset=utf-8", `受付で落ちました: ${e?.message ?? e}\n`);
-      else res.destroy();
-    } finally {
-      if (複製?.動いている?.()) await 複製.錠を返す().catch((e) => console.error("錠を返せません:", e));
-    }
-  });
+    });
+    return;
+  }
+
+  /**
+   * ─── 読み取り ───
+   *
+   * 取り込んでから流す。**応答は握らずそのまま通す**（5.26MB を抱えない）。
+   * 他のインスタンスが書いたものを見るために取り込みは毎回やる。
+   * 東京どうしなので往復は数ミリ秒で、当てる処理は同期なので描画と混ざらない。
+   */
+  try { if (複製?.動いている?.()) await 複製.取り込む(); }
+  catch (e) { console.error("取り込めません:", e); }
+  そのまま流す(req, res, 出す);
 });
 
+/** 受け切らずにそのまま通す（読み取り用） */
+function そのまま流す(req, res, 出す) {
+  const 流す = http.request(
+    { host: "127.0.0.1", port: 内側, path: req.url, method: req.method,
+      headers: { ...req.headers, host: `127.0.0.1:${内側}` } },
+    (ir) => { res.writeHead(ir.statusCode ?? 502, ir.headers); ir.pipe(res); });
+  流す.on("error", (e) => {
+    if (res.headersSent) return res.destroy();
+    出す(502, "text/plain; charset=utf-8", `内側へ流せませんでした: ${e.code ?? e.message}\n`);
+  });
+  req.pipe(流す);
+}
+
 /**
- * 内側の `app/serve.mjs` へ流し、**応答を受け切ってから**返す。
- * 受け切るのは、書き込みが終わったことを確かめてから利用者に返すため。
- * 一番大きい応答は CSV の 5.26MB（実測）なので、抱えても差し支えない。
+ * 内側の `app/serve.mjs` へ流し、**応答を受け切ってから**返す（書き込み用）。
+ * 受け切るのは、Supabase への書き出しが済んだことを確かめてから利用者に返すため。
  */
-function 内側へ流す(req) {
+function 受け切る(req) {
   return new Promise((解決, 拒否) => {
     const r = http.request(
       { host: "127.0.0.1", port: 内側, path: req.url, method: req.method,
