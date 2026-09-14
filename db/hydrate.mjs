@@ -79,11 +79,26 @@ export async function 用意する({ url = process.env.SUPABASE_SESSION_URL, 知
   const db = new DatabaseSync(":memory:");
   db.exec(インメモリ用のスキーマ(fs.readFileSync(path.join(ROOT, "db", "schema.sql"), "utf8")));
 
-  const c = new pg.Client({
-    connectionString: url, application_name: "ttcf-hydrate",
-    statement_timeout: 0, query_timeout: 0, keepAlive: true,
-  });
-  await c.connect();
+  /**
+   * 繋ぐのを数回試す。Vercel の 1 回目で EAUTHTIMEOUT を踏んだことがある（手元からは
+   * 71〜185ms で繋がるので、置き先側の一時的なもの）。**1 回の失敗でコールドスタートを
+   * 落とすと、そのインスタンスは作り直されるまで使えない。**
+   */
+  let c = null;
+  for (let 試み = 1; ; 試み++) {
+    c = new pg.Client({
+      connectionString: url, application_name: "ttcf-hydrate",
+      statement_timeout: 0, query_timeout: 0, keepAlive: true,
+      connectionTimeoutMillis: 20_000,
+    });
+    try { await c.connect(); break; }
+    catch (e) {
+      try { await c.end(); } catch { /* もう閉じている */ }
+      if (試み >= 4) throw e;
+      知らせる(`  繋げませんでした（${e.code ?? e.message}）。${試み * 3}秒おいて試みます`);
+      await new Promise((r) => setTimeout(r, 試み * 3000));
+    }
+  }
 
   let 合計 = 0;
   const 表たち = [

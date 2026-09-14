@@ -59,12 +59,20 @@ function 土台を診る() {
   };
 }
 
-const 状態 = { 段階: "まだ始めていない", 秒: null, 誤り: null, 移送: null };
+const 状態 = { 段階: "まだ始めていない", 秒: null, 誤り: null, 移送: null, 試み: 0 };
 
-const 準備 = (async () => {
+/**
+ * 準備は 1 本だけ。同時に来た要求が別々に組み始めると 2,700MB を 2 つ抱えて落ちる。
+ * **ただし失敗したらやり直せるようにする。** 一度の失敗で固まると、そのインスタンスは
+ * 作り直されるまで使えないままになる（Vercel の 1 回目で EAUTHTIMEOUT を踏んだ）。
+ */
+let 準備 = null;
+const 用意 = () => (準備 ??= 始める());
+async function 始める() {
   if (!process.env.SUPABASE_SESSION_URL) { 状態.段階 = "データ層 未接続（SUPABASE_SESSION_URL が無い）"; return false; }
   const t0 = Date.now();
   try {
+    状態.試み++;
     状態.段階 = "Supabase から読んでいる";
     const { 用意する } = await import("./db/hydrate.mjs");
     const 記録 = [];
@@ -89,9 +97,10 @@ const 準備 = (async () => {
     状態.段階 = "失敗";
     状態.誤り = e?.stack ?? String(e);
     console.error("用意に失敗しました:", e);
+    準備 = null;          // 次の要求でやり直せるようにする
     return false;
   }
-})();
+}
 
 const E = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
@@ -100,19 +109,19 @@ http.createServer(async (req, res) => {
   const 出す = (code, 型, 体) => { res.writeHead(code, { "content-type": 型 }); res.end(体); };
 
   if (u.pathname === "/_health" || u.pathname === "/_warm") {
-    const ok = await 準備;
+    const ok = await 用意();
     return 出す(ok ? 200 : 503, "application/json; charset=utf-8",
       JSON.stringify({ ok, 段階: 状態.段階, 秒: 状態.秒, at: new Date().toISOString() }));
   }
 
   if (u.pathname === "/__env") {
     const 土台 = 土台を診る();
-    await 準備;
+    await 用意();
     return 出す(200, "application/json; charset=utf-8",
       JSON.stringify({ ...土台, データ層: 状態 }, null, 2));
   }
 
-  const ok = await 準備;
+  const ok = await 用意();
   if (!ok) {
     const 土台 = 土台を診る();
     const だめ = Object.entries(土台).filter(([, v]) => String(v.判定).startsWith("×"));
