@@ -947,7 +947,7 @@ function 門の一覧() {
   }).join("");
   return 骨("門の一覧", `<h1>押せるかを決める式（門）</h1>
     <div class=sub>70式のうち、利用者に文言を出し条件分岐を持つもの ${門.length}本</div>
-    <div class=el><div class=scroll><table data-rowheight="${E(行の高さの字(spec))}"><thead><tr><th>表</th><th>項目</th><th class=r>文言</th><th>文言の例</th><th></th></tr></thead>
+    <div class=el><div class=scroll><table data-rowheight="${E(行の高さの字(null))}"><thead><tr><th>表</th><th>項目</th><th class=r>文言</th><th>文言の例</th><th></th></tr></thead>
     <tbody>${行}</tbody></table></div></div>`, null);
 }
 

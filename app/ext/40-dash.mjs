@@ -52,33 +52,28 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { decodeAirFile } from "../../crawl/lib/airmsg.mjs";
+import { レイアウト } from "../../db/layouts.mjs";
 
 let X = null;   // 文脈（準備で受ける。要素の描き手にも毎回渡るが、道具関数から引けるように控える）
 
 /** ─── 生レイアウト ─── */
-const 生の断面 = "pages-20260911";
-/** 09-11 の断面で本文が来なかった 15 画面（売上一覧・出庫一覧・出荷実績 × 5 束）だけ、09-12 に --bridge で取り直した置き場。無い画面はこちらを見る */
-const 補いの断面 = "pages-20260912-layout";
-/** 画面ID → { 要素: elementById, 枠: slotElementsById }。1 ファイルにそのベースの複数画面が入っているので開いたら全部覚える */
+/**
+ * もとは crawl/out/raw の msgpack（812MB）を実行時に読んでいたが、
+ * 読むのは publishedLayout だけで全 335 画面ぶんで 2.2MB しか無い。
+ * spec/published-layout.json にまとめて、Vercel のバンドルにも載るようにした。
+ * **引いた結果は前と同じ**（抽出時に衝突 0 件・335/335 取得を確認済み）。
+ */
 const 生の配置の記憶 = new Map();
 function 生の配置(ROOT, pid) {
   if (生の配置の記憶.has(pid)) return 生の配置の記憶.get(pid);
-  生の配置の記憶.set(pid, null);
-  const p = [生の断面, 補いの断面].map((d) => path.join(ROOT, "crawl", "out", "raw", d, `${pid}.msgpack`)).find((x) => fs.existsSync(x)) ?? "";
-  if (fs.existsSync(p)) {
-    try {
-      for (const pg of decodeAirFile(p)?.top?.data?.pages ?? []) {
-        const L = pg?.publishedLayout;
-        if (pg?.id && L?.elementById && !生の配置の記憶.get(pg.id)) 生の配置の記憶.set(pg.id, {
-          要素: L.elementById, 枠: L.slotElementsById ?? {},
-          /** 面の並び（dashboard 型の画面で使う）: 根の面 → fullCanvasElement → 要素 */
-          面: L.canvasAreaById ?? {}, 全面: L.fullCanvasElementById ?? {}, 根: L.rootCanvasAreaId ?? null,
-        });
-      }
-    } catch (e) { console.error(`生レイアウト ${pid} を読めません: ${e.message}`); }
-  }
-  return 生の配置の記憶.get(pid);
+  const L = レイアウト(ROOT, pid);
+  const v = L?.elementById ? {
+    要素: L.elementById, 枠: L.slotElementsById ?? {},
+    /** 面の並び（dashboard 型の画面で使う）: 根の面 → fullCanvasElement → 要素 */
+    面: L.canvasAreaById ?? {}, 全面: L.fullCanvasElementById ?? {}, 根: L.rootCanvasAreaId ?? null,
+  } : null;
+  生の配置の記憶.set(pid, v);
+  return v;
 }
 const 生の要素 = (pid, pel) => 生の配置(X.ROOT, pid)?.要素?.[pel] ?? null;
 

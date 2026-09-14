@@ -68,30 +68,20 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { decodeAirFile } from "../../crawl/lib/airmsg.mjs";
+import { レイアウト } from "../../db/layouts.mjs";
 
 let X = null;                 // 文脈（準備で受ける）
 const 起動 = new Date().toISOString();
 
 /** ─── 生レイアウト ─── */
-const 生の断面 = "pages-20260911";
-/** 09-11 の断面で本文が来なかった 15 画面（売上一覧・出庫一覧・出荷実績 × 5 束）だけ、09-12 に --bridge で取り直した置き場。無い画面はこちらを見る */
-const 補いの断面 = "pages-20260912-layout";
-const 生の頁 = new Map();      // pid → publishedLayout
-const 開いた = new Set();
-/** 画面のファイルにはその応答に入っていた画面ぶんのレイアウトが入っている（実測 1〜36 画面）。開いたら全部覚える */
+/**
+ * もとは crawl/out/raw の msgpack（812MB）を実行時に読んでいたが、
+ * 読むのは publishedLayout だけで全 335 画面ぶんで 2.2MB しか無い。
+ * spec/published-layout.json にまとめて、Vercel のバンドルにも載るようにした。
+ * **引いた結果は前と同じ**（抽出時に衝突 0 件・335/335 取得を確認済み）。
+ */
 function 生レイアウト(pid) {
-  if (!生の頁.has(pid) && !開いた.has(pid)) {
-    開いた.add(pid);
-    const p = [生の断面, 補いの断面].map((d) => path.join(X.ROOT, "crawl", "out", "raw", d, `${pid}.msgpack`)).find((x) => fs.existsSync(x)) ?? "";
-    if (fs.existsSync(p)) {
-      try {
-        for (const pg of decodeAirFile(p)?.top?.data?.pages ?? [])
-          if (pg?.id && pg.publishedLayout && !生の頁.has(pg.id)) 生の頁.set(pg.id, pg.publishedLayout);
-      } catch (e) { console.error(`生レイアウト ${pid} を読めません: ${e.message}`); }
-    }
-  }
-  return 生の頁.get(pid) ?? null;
+  return レイアウト(X.ROOT, pid);
 }
 const 生の要素 = (pid, pel) => 生レイアウト(pid)?.elementById?.[pel] ?? null;
 
