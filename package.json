@@ -2,37 +2,22 @@
   "name": "ttcf",
   "private": true,
   "type": "module",
-  "//engines": "比較の正解（常駐版）が v22 なので、Vercel もそこへ揃える。node:sqlite は 22 では experimental・24 では安定で、同じ入力で同じ出力になる保証が無い。移植前後のバイト比較が終わるまでは動かさない",
+  "//": "配信用。実行に要るものだけを置く枝なので、依存も実行時のものだけにする。開発の枝（crawler）には playwright などが入っているが、ここには要らない（app/ と db/ からは一度も import されない。実測: @msgpack/msgpack と msgpackr はリポジトリ全体で import 0 件、playwright は crawl/ のみ）。playwright を残すとビルドのたびにブラウザを落としに行く。",
+  "//engines": "比較の正解（常駐版）が v22 なので Vercel もそこへ揃える。node:sqlite は 22 では experimental・24 では安定で、同じ入力で同じ出力になる保証が無い。移植前後のバイト比較が終わるまでは動かさない。",
   "engines": {
     "node": "22.x"
   },
   "scripts": {
     "start": "TZ=UTC node app/serve.mjs",
-    "deploy": "bash deploy/install.sh",
-    "deploy:stop": "bash deploy/install.sh stop",
-    "deploy:status": "bash deploy/install.sh status",
-    "test": "node db/05-query-test.mjs && node db/07-calc-parity.mjs && node db/08-write-test.mjs && node db/13-action-test.mjs",
-    "coverage": "node db/15-coverage.mjs",
-    "crawl:check": "node crawl/00-check.mjs",
-    "crawl:pages": "node crawl/01-pages.mjs",
-    "crawl:shots": "node crawl/01b-shots.mjs",
-    "crawl:forms": "node crawl/02-forms.mjs",
-    "crawl:fields": "node crawl/03-fields.mjs",
-    "crawl:export": "node crawl/04-export.mjs",
-    "crawl:hidden": "node crawl/01c-hidden.mjs",
-    "crawl:inputs": "node crawl/03b-inputs.mjs",
-    "crawl:spec": "node crawl/02b-form-spec.mjs",
-    "crawl:schema": "node crawl/06-schema.mjs",
-    "watch": "node crawl/watch.mjs",
-    "crawl:fullschema": "node crawl/07-schema.mjs",
-    "crawl:pagespec": "node crawl/08-pages.mjs",
-    "crawl:pagedata": "node crawl/09-pagedata.mjs",
-    "crawl:digest": "node crawl/10-digest.mjs",
-    "crawl:artifacts": "node crawl/11-artifacts.mjs"
+    "check:env": "node tools/check-env.mjs",
+    "pg:schema": "node tools/apply-schema.mjs",
+    "pg:columns": "node tools/check-columns.mjs",
+    "pg:load": "node tools/load-to-pg.mjs",
+    "pg:verify": "node tools/verify-pg.mjs",
+    "pg:try": "node tools/try-hydrate.mjs"
   },
   "dependencies": {
-    "@msgpack/msgpack": "^3.1.3",
-    "msgpackr": "^2.1.0",
-    "playwright": "^1.62.1"
+    "pg": "^8.23.0",
+    "pg-copy-streams": "^7.0.0"
   }
 }

@@ -22,7 +22,18 @@ export const SPEC = path.join(ROOT, "spec");
 export const DATA = path.join(ROOT, "data");
 export const DB_FILE = path.join(DATA, "ttcf.db");
 
+/**
+ * 器の差し替え口。**Vercel ではファイルを開けないので、組み上げたインメモリの DB を渡す。**
+ *
+ * db/hydrate.mjs が Supabase から組んだものを、server.mjs がここへ預ける。
+ * 以後 open() はそれを返すので、**下流の 442 箇所は一行も変えずに済む**。
+ * 何も預けられていなければ、今までどおりファイルを開く（手元の常駐版は無変更）。
+ */
+let 預かり = null;
+export function 預ける(db) { 預かり = db; }
+
 export function open({ file = DB_FILE, fresh = false } = {}) {
+  if (預かり && file === DB_FILE && !fresh) return 預かり;
   if (file !== ":memory:") {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     if (fresh) for (const suffix of ["", "-wal", "-shm"]) {
