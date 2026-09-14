@@ -39,6 +39,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const 置き場 = path.join(ROOT, "spec", "compare");
 const 引数 = process.argv.slice(2);
 const 取る = 引数.includes("--取る") ? 引数[引数.indexOf("--取る") + 1] : null;
+/** 既に取ってあるスナップショットに、spec/compare/追加経路.json のぶんだけを**足す**。
+ *  同じコード・同じ置き先から取り足すときにだけ使う。取り直しを避けるためのもので、
+ *  古い断面と新しい断面を混ぜると比較が嘘になる。混ざっていないことは呼ぶ側の責任。 */
+const 足す = 引数.includes("--足す") ? 引数[引数.indexOf("--足す") + 1] : null;
 const 比べる = 引数.includes("--比べる");
 const BASE = (引数.includes("--base") ? 引数[引数.indexOf("--base") + 1] : "").replace(/\/$/, "");
 const BYPASS = 引数.includes("--bypass") ? 引数[引数.indexOf("--bypass") + 1] : null;
@@ -92,12 +96,27 @@ function 均す(体, 経路) {
 
 async function 取りに行く() {
   if (!BASE) { console.error("× --base が要ります"); process.exit(2); }
-  const 先 = path.join(置き場, 取る);
+  const 名 = 取る ?? 足す;
+  const 先 = path.join(置き場, 名);
   fs.mkdirSync(先, { recursive: true });
-  const 経路 = 経路たち();
-  console.log(`${取る}: ${BASE}  経路 ${経路.length} 本  並列 ${並列}\n`);
 
+  /** 足すときは、既にある索引を残したまま、まだ無い経路だけを取る */
   const 索引 = [];
+  let 既に = new Set();
+  let 経路;
+  if (足す) {
+    const 前 = JSON.parse(fs.readFileSync(path.join(先, "index.json"), "utf8"));
+    if (前.base !== BASE) { console.error(`× 置き先が違います: 前 ${前.base} / 今 ${BASE}`); process.exit(2); }
+    索引.push(...前.経路);
+    既に = new Set(前.経路.map((x) => x.経路));
+    const 足し = JSON.parse(fs.readFileSync(path.join(置き場, "追加経路.json"), "utf8")).経路;
+    経路 = 足し.filter((u) => !既に.has(u));
+    console.log(`${名}: ${BASE}  既に ${既に.size} 本 ＋ 足す ${経路.length} 本  並列 ${並列}\n`);
+  } else {
+    経路 = 経路たち();
+    console.log(`${名}: ${BASE}  経路 ${経路.length} 本  並列 ${並列}\n`);
+  }
+
   let 済 = 0;
   const 頭 = BYPASS ? { "x-vercel-protection-bypass": BYPASS } : {};
 
@@ -166,6 +185,6 @@ function 突き合わせる() {
   process.exit(不一致.length ? 1 : 0);
 }
 
-if (取る) await 取りに行く();
+if (取る || 足す) await 取りに行く();
 else if (比べる) 突き合わせる();
-else { console.error("--取る <名前> --base <URL> [--bypass <鍵>] / --比べる <名前> <名前>"); process.exit(2); }
+else { console.error("--取る <名前> --base <URL> [--bypass <鍵>]\n--足す <名前> --base <URL> [--bypass <鍵>]   追加経路.json のぶんだけ足す\n--比べる <名前> <名前>"); process.exit(2); }

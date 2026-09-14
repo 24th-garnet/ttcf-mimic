@@ -74,6 +74,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { 一覧 as bom一覧, 本文 as bom本文 } from "../db/bom.mjs";
 import { 紙に載せる, 数, 円, 数値, 文字, 関連先ID, 年月日, 日付, 日付部 } from "./doc-sales.mjs";
 
 const E = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -269,12 +270,10 @@ let 控え = null;
 function 控えを読む(ROOT) {
   if (控え) return 控え;
   控え = new Map();
-  const dir = path.join(ROOT, "crawl", "out", "raw", "bom");
-  if (!fs.existsSync(dir)) return 控え;
-  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".jsonl"))) {
+  for (const f of bom一覧(ROOT).filter((x) => x.endsWith(".jsonl"))) {
     const rid = f.replace(/\.jsonl$/, ""); const 出庫 = [], 仕掛出庫 = []; let 製品 = null;
     try {
-      for (const line of fs.readFileSync(path.join(dir, f), "utf8").split("\n")) {
+      for (const line of (bom本文(ROOT, f) ?? "").split("\n")) {
         if (!line || !/fetchInitialTableIdsToLinkedTableStates/.test(line)) continue;
         const o = JSON.parse(line); let b; try { b = JSON.parse(o.body); } catch { continue; }
         const d = b?.result?.data ?? {};

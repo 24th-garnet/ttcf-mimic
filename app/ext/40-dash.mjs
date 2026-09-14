@@ -53,6 +53,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { レイアウト } from "../../db/layouts.mjs";
+import { 一覧 as 実物の名前, 引く as 実物を引く } from "../../db/artifacts.mjs";
 
 let X = null;   // 文脈（準備で受ける。要素の描き手にも毎回渡るが、道具関数から引けるように控える）
 
@@ -723,7 +724,7 @@ const 実物の置き場 = () => path.join(X.ROOT, "crawl", "out", "artifacts");
 let 実物の一覧 = null;
 /** 手元の実物。ファイル名は `<タブ>-<表>-<項目>__<行ID>__<元のファイル名>` */
 function 実物を探す(行ID, ファイル名) {
-  if (!実物の一覧) { try { 実物の一覧 = fs.readdirSync(実物の置き場()); } catch { 実物の一覧 = []; } }
+  実物の一覧 ??= 実物の名前(X.ROOT);
   return 実物の一覧.find((f) => f.includes(`__${行ID}__`) && f.endsWith(`__${ファイル名}`)) ?? 実物の一覧.find((f) => f.endsWith(`__${ファイル名}`)) ?? null;
 }
 const 大きさ = (b) => (b == null ? "" : b >= 1e6 ? `${Math.round(b / 1e5) / 10} MB` : b >= 1e3 ? `${Math.round(b / 100) / 10} KB` : `${b} B`);
@@ -744,7 +745,7 @@ function 回転木馬を描く(e, spec, pid, u) {
     const 全体 = db.prepare(`SELECT count(*) c FROM row WHERE tbl=? AND (json_extract(cells, ?) IS NOT NULL OR json_extract(snap, ?) IS NOT NULL)`).get(e.tbl, `$.${fid}`, `$.${fid}`).c;
     const 要求 = db.prepare("SELECT count(*) c FROM requested WHERE fld=?").get(fid).c;
     const 表名 = X.表.get(e.tbl);
-    if (!実物の一覧) { try { 実物の一覧 = fs.readdirSync(実物の置き場()); } catch { 実物の一覧 = []; } }
+    実物の一覧 ??= 実物の名前(X.ROOT);
     const 実物 = 表名 ? 実物の一覧.filter((f) => f.startsWith(`${表名.tab}-${表名.name}-`)).length : 0;
     /**
      * **「値が無い」と「要求していない」は別物**（db/query.mjs の注と同じ）。
@@ -882,14 +883,13 @@ export const 要素 = {
  * 名前は basename に限り、置き場の外は見ない。
  */
 export const 経路 = [
-  { method: "GET", pattern: /^\/artifact\/([^/]+)$/, handler: (req, res, u, m, 文脈) => {
+  { method: "GET", pattern: /^\/artifact\/([^/]+)$/, handler: async (req, res, u, m, 文脈) => {
     X = 文脈;
     let 名; try { 名 = path.basename(decodeURIComponent(m[1])); } catch { return 文脈.出す(res, 文脈.骨("404", "<h1>その実物は手元にありません</h1>", null), 404); }
-    const p = path.join(実物の置き場(), 名);
-    if (!p.startsWith(実物の置き場() + path.sep) || !fs.existsSync(p) || !fs.statSync(p).isFile()) return 文脈.出す(res, 文脈.骨("404", "<h1>その実物は手元にありません</h1>", null), 404);
-    const 種 = { ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml" }[path.extname(名).toLowerCase()] ?? "application/octet-stream";
-    res.writeHead(200, { "content-type": 種, "content-length": fs.statSync(p).size, "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(名)}` });
-    fs.createReadStream(p).pipe(res);
+    const r = await 実物を引く(文脈.ROOT, 名);
+    if (!r) return 文脈.出す(res, 文脈.骨("404", "<h1>その実物は手元にありません</h1>", null), 404);
+    res.writeHead(200, { "content-type": r.ctype, "content-length": r.bytes, "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(名)}` });
+    res.end(r.body);
   } },
 ];
 

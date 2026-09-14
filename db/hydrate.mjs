@@ -35,6 +35,8 @@ import { DatabaseSync } from "node:sqlite";
 import pg from "pg";
 import { to as copyTo } from "pg-copy-streams";
 import { 表の対応, 列を戻す, インメモリ用のスキーマ } from "./pg/mapping.mjs";
+import { 預ける as bomを預ける } from "./bom.mjs";
+import { 預ける as 実物を預ける } from "./artifacts.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -148,6 +150,25 @@ export async function 用意する({ url = process.env.SUPABASE_SESSION_URL, 知
     合計 += n;
     知らせる(`  ${t.lite.padEnd(18)} ${n.toLocaleString().padStart(10)} 行`);
   }
+
+  /**
+   * ■ 実行時に読むファイル
+   *
+   * 2,822 経路の突き合わせ（2026-09-14）で残った差 255 本は、すべて
+   * 「ファイルを Vercel に載せていない」ことが原因だった。どちらもクライアントの
+   * 業務データなので GitHub には置けない。他の業務データと同じ Supabase から引く。
+   *
+   *   控え   12MB /    41件  → 全部メモリへ（元も「起動後に一度だけ読む」作り）
+   *   実物  127MB / 1,057件  → **名前だけ**。中身は叩かれたときに引く
+   */
+  const 控え = new Map();
+  for (const r of (await c.query("select name, body from bom_file")).rows) 控え.set(r.name, r.body);
+  bomを預ける(控え);
+  知らせる(`  使用原材料の控え   ${控え.size} 件`);
+
+  const 実物 = (await c.query("select name from artifact order by name")).rows.map((r) => r.name);
+  実物を預ける(実物, url);
+  知らせる(`  帳票の実物         ${実物.length.toLocaleString()} 件（名前だけ）`);
 
   await c.end();
   知らせる(`移送 ${合計.toLocaleString()} 行 / ${((Date.now() - T0) / 1000).toFixed(1)}秒`);

@@ -27,6 +27,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { 書き込み器を作る } from "./write.mjs";
 import { ROOT } from "./open.mjs";
+import { 本文 as bom本文 } from "./bom.mjs";
 
 const 売上 = "tblUBK06Qb5cBQ9Tg";
 const 出庫 = "tblkV3ZPRWixoUtaB";
@@ -1160,15 +1161,14 @@ export function 動作器を作る(db) {
   function BOMを読む() {
     if (BOMの控え) return BOMの控え;
     BOMの控え = [];
-    const dir = path.join(ROOT, "crawl", "out", "raw", "bom");
     let index = [];
-    try { index = JSON.parse(fs.readFileSync(path.join(dir, "index.json"), "utf8")); } catch { return BOMの控え; }
+    try { index = JSON.parse(bom本文(ROOT, "index.json") ?? ""); } catch { return BOMの控え; }
     for (const x of index) {
       const m = String(x.主 ?? "").match(/^(\d{8})-([^-]+)-(\d+)$/);
       if (!m) continue;
       const 子 = [];
       if (x.出庫行 > 0) {
-        let 本文 = ""; try { 本文 = fs.readFileSync(path.join(dir, `${x.id}.jsonl`), "utf8"); } catch { continue; }
+        const 本文 = bom本文(ROOT, `${x.id}.jsonl`); if (本文 == null) continue;
         for (const 行 of 本文.split("\n")) {
           if (!行.includes("fetchInitialTableIdsToLinkedTableStates") || !行.includes(製造出庫)) continue;
           let o; try { o = JSON.parse(JSON.parse(行).body); } catch { continue; }
